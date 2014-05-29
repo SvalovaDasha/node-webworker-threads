@@ -35,6 +35,7 @@ static int debug_allocs= 0;
 #include "queues_a_gogo.cc"
 #include "bson.cc"
 #include "jslib.cc"
+#include "ArrayBufferWrap.cc"
 
 //using namespace node;
 using namespace v8;
@@ -290,6 +291,10 @@ static void eventLoop (typeThread* thread) {
 
     Local<Object> threadObject= Object::New();
     global->Set(String::NewSymbol("thread"), threadObject);
+
+	Handle<FunctionTemplate> functionArrayBufferTemplate = FunctionTemplate::New(ArrayBufferNewObject);
+	functionArrayBufferTemplate->SetClassName(String::New("ArrayBuffer"));
+	global->Set(String::New("ArrayBuffer"), functionArrayBufferTemplate->GetFunction());
 
     threadObject->Set(String::NewSymbol("id"), Number::New(thread->id));
     threadObject->Set(String::NewSymbol("emit"), FunctionTemplate::New(threadEmit)->GetFunction());
