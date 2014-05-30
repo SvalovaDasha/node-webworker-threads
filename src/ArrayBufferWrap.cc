@@ -34,6 +34,17 @@ static Handle<Value> ArrayBufferNewObject(const Arguments &args){
 	return scope.Close(newObj);
 }
 
+static Handle<Value> ArrayBufferNewObject(unsigned int size, byte* data){
+	HandleScope scope;
+
+	Handle<Object> newObj = ArrayBufferNewInstance();
+	MyArrayBuffer* newArrayBuffer = new MyArrayBuffer(0, size-1, data);
+	newObj->SetInternalField(0, External::New(newArrayBuffer));
+	newObj->SetIndexedPropertiesToExternalArrayData(data, kExternalByteArray, size);
+
+	return scope.Close(newObj);
+}
+
 static Handle<Value> getByteLength(Local<String> property, const AccessorInfo &info) {
 	Local<External> wrap = Local<External>::Cast(info.Holder()->GetInternalField(0));
 	int value = static_cast<MyArrayBuffer*>(wrap->Value())->getByteLength();

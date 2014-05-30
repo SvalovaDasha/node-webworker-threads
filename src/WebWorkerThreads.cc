@@ -401,7 +401,29 @@ static void eventLoop (typeThread* thread) {
           size_t size = job->typeEventSerialized.bufferSize;
           BSONDeserializer deserializer(bson, data, size);
           Local<Object> result = deserializer.DeserializeDocument(true)->ToObject();
-          int i = 0; do { array->Set(i, result->Get(i)); } while (++i < len);
+          int i = 0; do {
+			Local<Value> deserializedValue = result->Get(i);
+			Local<Object> deserializedObject = deserializedValue->ToObject();
+			if(deserializedObject->HasOwnProperty(String::New("transfer"))){
+				Handle<Value> newObject;
+				TransferableType transferableType = TransferableType(deserializedObject->Get(String::New("TransferableType"))->Uint32Value());
+									
+				switch(transferableType){
+				case ArrayBuffer:{
+					byte* pointer = (byte*)(deserializedObject->Get(String::New("dataPointer"))->Int32Value());
+					unsigned int dataLength = deserializedObject->Get(String::New("byteLength"))->Uint32Value();
+					newObject = ArrayBufferNewObject(dataLength, pointer);
+
+					break;
+					}
+				}
+									
+				Local<Object> resultObject = Object::New();
+				resultObject->Set(String::New("data"), newObject);
+				array->Set(i, resultObject);
+			}else
+				array->Set(i, deserializedValue);
+		  } while (++i < len);
           free(data);
         }
 
