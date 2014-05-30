@@ -910,6 +910,34 @@ static Handle<Value> threadEmit (const Arguments &args) {
   return scope.Close(args.This());
 }
 
+static Handle<Value> threadOnMessage(const Arguments& args){
+	HandleScope scope;
+	Handle<Object> result = Object::New();
+	Handle<Object> recObject = args[0]->ToObject();
+	
+	if(recObject->HasOwnProperty(String::New("transfer"))){
+		Handle<Value> newObject;
+		TransferableType transType = TransferableType(recObject->Get(String::New("TransferableType"))->Uint32Value());
+									
+		switch(transType){
+		case ArrayBuffer:{
+			byte* pointer = (byte*)(recObject->Get(String::New("dataPointer"))->Int32Value());
+			unsigned int dataLength = recObject->Get(String::New("byteLength"))->Uint32Value();
+			Handle<Object> abConstructor = Context::GetCurrent()->Global()->Get(String::New("ArrayBuffer"))->ToObject();
+			Handle<Value> abArgs = Integer::New(dataLength);
+			newObject = abConstructor->CallAsConstructor(1, &abArgs);
+			newObject->ToObject()->SetIndexedPropertiesToExternalArrayData(pointer, kExternalByteArray, dataLength);
+			break;
+		}
+		default:
+			return ThrowException(Exception::TypeError(String::New("This type is not transferable")));
+		}
+		result->Set(String::New("data"), newObject);
+	}else
+		result->Set(String::New("data"), args[0]);
+
+	return scope.Close(result);
+}
 
 
 
@@ -999,6 +1027,7 @@ void Init (Handle<Object> target) {
   threadTemplate->Set(String::NewSymbol("emit"), FunctionTemplate::New(processEmit));
   threadTemplate->Set(String::NewSymbol("emitSerialized"), FunctionTemplate::New(processEmitSerialized));
   threadTemplate->Set(String::NewSymbol("destroy"), FunctionTemplate::New(Destroy));
+  threadTemplate->Set(String::NewSymbol("onMessage"), FunctionTemplate::New(threadOnMessage));
 
 }
 
