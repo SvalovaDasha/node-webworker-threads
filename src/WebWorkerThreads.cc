@@ -36,6 +36,7 @@ static int debug_allocs= 0;
 #include "bson.cc"
 #include "jslib.cc"
 #include "ArrayBufferWrap.cc"
+#include "Transferable.cc"
 
 //using namespace node;
 using namespace v8;
@@ -759,7 +760,23 @@ static Handle<Value> processEmitSerialized (const Arguments &args) {
   job->typeEventSerialized.length= len-1;
   job->typeEventSerialized.eventName= new String::Utf8Value(args[0]);
   Local<Array> array= Array::New(len-1);
-  int i = 1; do { array->Set(i-1, args[i]); } while (++i < len);
+  int i = 1; do {
+	  if(args[i]->ToObject()->HasOwnProperty(Handle<String>(String::New("transfer")))){
+			Local<Object> transferList = args[i]->ToObject()->GetRealNamedProperty(String::New("transfer"))->ToObject();
+			size_t transferListLength = transferList->Get(String::New("length"))->Uint32Value();
+			for(int j=0; j<transferListLength && j == 0; j++){ // while only the first
+				Handle<Object> currentObject = transferList->Get(j)->ToObject();
+				Handle<Value> valueForTransfer = getObjectForTransfer(currentObject);
+				if(valueForTransfer->ToObject()->Has(String::New("transfer"))){
+					array->Set(i-1, valueForTransfer);
+					currentObject->TurnOnAccessCheck();
+				}else
+					return ThrowException(valueForTransfer);
+			}
+		}else{
+			array->Set(i-1, args[i]);
+		} 
+  } while (++i < len);
 
     {
       char* buffer;
