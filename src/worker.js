@@ -30,11 +30,13 @@ function Worker(){
       this.dispatchEvent = function(event){
         return t.emitSerialized(event.type, event);
       };
-      this.postMessage = function(data){
-        return t.emitSerialized('message', {
-          data: data
-        });
-      };
+      this.postMessage=function(data, transferList){
+		if(transferList){
+			return t.emitSerialized('message', {data:data, transfer:transferList});
+		}else{
+			return t.emitSerialized('message',{data:data});
+		}
+	};
       if (typeof code === 'function') {
         t.eval("(" + code + ")()");
       } else if (code != null) {
