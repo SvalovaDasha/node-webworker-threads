@@ -786,7 +786,7 @@ static Handle<Value> processEmitSerialized (const Arguments &args) {
 	  if(args[i]->ToObject()->HasOwnProperty(Handle<String>(String::New("transfer")))){
 			Local<Object> transferList = args[i]->ToObject()->GetRealNamedProperty(String::New("transfer"))->ToObject();
 			size_t transferListLength = transferList->Get(String::New("length"))->Uint32Value();
-			for(int j=0; j<transferListLength && j == 0; j++){ // while only the first
+			for(size_t j=0; j<transferListLength && j == 0; j++){ // while only the first
 				Handle<Object> currentObject = transferList->Get(j)->ToObject();
 				Handle<Value> valueForTransfer = getObjectForTransfer(currentObject);
 				if(valueForTransfer->ToObject()->Has(String::New("transfer"))){
@@ -836,7 +836,19 @@ static Handle<Value> processEmitSerialized (const Arguments &args) {
   job->typeEventSerialized.length= len; \
  \
   Local<Array> array= Array::New(len); \
-  int i = 0; do { array->Set(i, args[i]); } while (++i < len); \
+  if(len == 2 && args[1]->IsArray()){ \
+		Handle<Object> transferList = args[1]->ToObject(); \
+		size_t transferListLength = transferList->Get(String::New("length"))->Uint32Value(); \
+		for(size_t i=0; i<transferListLength && i==0 /*while only one*/; i++){ \
+			Handle<Object> refObj = transferList->Get(i)->ToObject(); \
+			Handle<Value> valueForTransfer = getObjectForTransfer(refObj); \
+			if(valueForTransfer->ToObject()->Has(String::New("transfer"))){ \
+				array->Set(0, valueForTransfer); \
+				refObj->TurnOnAccessCheck();\
+			}else \
+				return ThrowException(valueForTransfer); \
+		} \
+	} else { int i = 0; do { array->Set(i, args[i]); } while (++i < len); }\
  \
     { \
       char* buffer; \
