@@ -35,7 +35,7 @@ static Handle<Value> getObjectForTransfer(Handle<Object> source){
 		byte* data = ((byte*)source->GetIndexedPropertiesExternalArrayData());
 		int dataLength = source->GetIndexedPropertiesExternalArrayDataLength();
 
-		result->SetHiddenValue(String::New("transfer"), Integer::New(1));
+		result->Set(String::New("*"), Integer::New(1));
 		result->Set(String::New("byteLength"), v8::Uint32::New(dataLength < 0 ? 0 : dataLength));
 		result->Set(String::New("dataPointer"), Integer::New((int)data));	
 		result->Set(String::New("TransferableType"), v8::Uint32::New(sourceTransType));
@@ -53,6 +53,21 @@ static Handle<Value> getObjectForTransfer(Handle<Object> source){
 	}
 
 	return scope.Close(result);
+}
+
+Handle<Value> recoverTransferObject(Handle<Object> cover){
+	HandleScope scope;
+	TransferableType transferableType = TransferableType(cover->Get(String::New("TransferableType"))->Uint32Value());
+									
+	switch(transferableType){
+	case ArrayBuffer:{
+		byte* pointer = (byte*)(cover->Get(String::New("dataPointer"))->Int32Value());
+		unsigned int dataLength = cover->Get(String::New("byteLength"))->Uint32Value();
+		return scope.Close(ArrayBufferNewObject(dataLength, pointer));
+
+		break;
+		}
+	}
 }
 
 size_t testOnUnique(Handle<Object> list){
@@ -126,15 +141,50 @@ void goDeeper(const Handle<Object>& source, const std::vector<byte*>& transferPo
 	}
 }
 
-Handle<Value> getPackedObject(const Handle<Object>& source, const Handle<Object>& transferList){
+Handle<Value> getPackedObject(const Handle<Value>& source, const Handle<Object>& transferList){
 	HandleScope scope;
 
 	Handle<Object> result = Object::New();
-	std::vector<byte*> transferPointers;
-	size_t transferListSize = transferList->Get(String::New("length"))->Uint32Value();
-	for(size_t i=0; i<transferListSize; i++)
-		transferPointers.push_back((byte*)(transferList->Get(i)->ToObject()->GetIndexedPropertiesExternalArrayData()));
-	goDeeper(source, transferPointers, result);
+	if(source->IsObject()){
+		std::vector<byte*> transferPointers;
+		size_t transferListSize = transferList->Get(String::New("length"))->Uint32Value();
+		for(size_t i=0; i<transferListSize; i++)
+			transferPointers.push_back((byte*)(transferList->Get(i)->ToObject()->GetIndexedPropertiesExternalArrayData()));
+		goDeeper(source->ToObject(), transferPointers, result);
+		return scope.Close(result);
+	}else
+		return scope.Close(source);
+}
 
-	return scope.Close(result);
+void goDeeper(const Handle<Object>& source, Handle<Object>& sourceCopy){
+	Handle<Array> sourcePropertyNames = source->GetPropertyNames();
+	size_t sourcePropertyNumber = sourcePropertyNames->Length();
+	for(size_t i=0; i<sourcePropertyNumber; i++){
+		Handle<String> currentPropertyName = sourcePropertyNames->Get(i)->ToString();
+		Handle<Value> currentProperty = source->Get(currentPropertyName);
+		if(!currentProperty->IsObject()){
+			sourceCopy->Set(currentPropertyName, currentProperty);
+		}else{
+			Handle<Object> currentPropertyObject = currentProperty->ToObject();
+			if(currentPropertyObject->Has(String::New("*"))){
+				sourceCopy->Set(currentPropertyName, recoverTransferObject(currentPropertyObject));
+			}else{
+				Handle<Object> currentPropertyCopy = currentProperty->ToObject();
+				goDeeper(currentProperty->ToObject(), currentPropertyCopy);
+				sourceCopy->Set(currentPropertyName, currentPropertyCopy);
+			}
+		}
+
+	}
+}
+
+Handle<Value> getUnpackedObject(Handle<Value> packedObject){
+	HandleScope scope;
+
+	if(packedObject->IsObject()){
+		Handle<Object> result = Object::New();
+		goDeeper(packedObject->ToObject(), result);
+		return scope.Close(result);
+	}else
+		return scope.Close(packedObject);
 }

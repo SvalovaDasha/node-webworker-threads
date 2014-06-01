@@ -404,22 +404,11 @@ static void eventLoop (typeThread* thread) {
           int i = 0; do {
 			Local<Value> deserializedValue = result->Get(i);
 			Local<Object> deserializedObject = deserializedValue->ToObject();
-			if(false){//deserializedObject->HasOwnProperty(String::New("transfer"))){
-				Handle<Value> newObject;
-				TransferableType transferableType = TransferableType(deserializedObject->Get(String::New("TransferableType"))->Uint32Value());
-									
-				switch(transferableType){
-				case ArrayBuffer:{
-					byte* pointer = (byte*)(deserializedObject->Get(String::New("dataPointer"))->Int32Value());
-					unsigned int dataLength = deserializedObject->Get(String::New("byteLength"))->Uint32Value();
-					newObject = ArrayBufferNewObject(dataLength, pointer);
-
-					break;
-					}
-				}
+			if(deserializedObject->HasOwnProperty(String::New("transfer"))){
+				Handle<Value> unpackedObject = getUnpackedObject(deserializedObject->Get(String::New("transfer")));
 									
 				Local<Object> resultObject = Object::New();
-				resultObject->Set(String::New("data"), newObject);
+				resultObject->Set(String::New("data"), unpackedObject);
 				array->Set(i, resultObject);
 			}else
 				array->Set(i, deserializedValue);
@@ -793,8 +782,8 @@ static Handle<Value> processEmitSerialized (const Arguments &args) {
 			if(notTransferable >= 0)
 				return ThrowException(DataCloneError(String::New("Not all objects are Transferable")));
 			
-			Local<Object> data = args[1]->ToObject()->GetRealNamedProperty(String::New("data"))->ToObject();
-			Local<Object> packedObject = getPackedObject(data, transferList)->ToObject();
+			Local<Value> data = args[1]->ToObject()->GetRealNamedProperty(String::New("data"));
+			Handle<Value> packedObject = getPackedObject(data, transferList);
 			Handle<Object> result = Object::New();
 			result->Set(String::New("transfer"), packedObject);
 			array->Set(0, result);
