@@ -404,7 +404,7 @@ static void eventLoop (typeThread* thread) {
           int i = 0; do {
 			Local<Value> deserializedValue = result->Get(i);
 			Local<Object> deserializedObject = deserializedValue->ToObject();
-			if(deserializedObject->HasOwnProperty(String::New("transfer"))){
+			if(false){//deserializedObject->HasOwnProperty(String::New("transfer"))){
 				Handle<Value> newObject;
 				TransferableType transferableType = TransferableType(deserializedObject->Get(String::New("TransferableType"))->Uint32Value());
 									
@@ -782,23 +782,28 @@ static Handle<Value> processEmitSerialized (const Arguments &args) {
   job->typeEventSerialized.length= len-1;
   job->typeEventSerialized.eventName= new String::Utf8Value(args[0]);
   Local<Array> array= Array::New(len-1);
-  int i = 1; do {
-	  if(args[i]->ToObject()->HasOwnProperty(Handle<String>(String::New("transfer")))){
-			Local<Object> transferList = args[i]->ToObject()->GetRealNamedProperty(String::New("transfer"))->ToObject();
-			size_t transferListLength = transferList->Get(String::New("length"))->Uint32Value();
-			for(size_t j=0; j<transferListLength && j == 0; j++){ // while only the first
-				Handle<Object> currentObject = transferList->Get(j)->ToObject();
-				Handle<Value> valueForTransfer = getObjectForTransfer(currentObject);
-				if(valueForTransfer->ToObject()->Has(String::New("transfer"))){
-					array->Set(i-1, valueForTransfer);
-					currentObject->TurnOnAccessCheck();
-				}else
-					return ThrowException(valueForTransfer);
-			}
+  if(args[0]->Equals(String::New("message"))){
+	   if(args[1]->ToObject()->HasOwnProperty(Handle<String>(String::New("transfer")))){
+			Local<Object> transferList = args[1]->ToObject()->GetRealNamedProperty(String::New("transfer"))->ToObject();
+			size_t duplicateIndex = testOnUnique(transferList);
+			if(duplicateIndex != 0)
+				return ThrowException(DataCloneError(String::New("Not all ArrayBuffers is transferList are unique")));
+
+			int notTransferable = testOnTransferable(transferList);
+			if(notTransferable >= 0)
+				return ThrowException(DataCloneError(String::New("Not all objects are Transferable")));
+			
+			Local<Object> data = args[1]->ToObject()->GetRealNamedProperty(String::New("data"))->ToObject();
+			Local<Object> packedObject = getPackedObject(data, transferList)->ToObject();
+			Handle<Object> result = Object::New();
+			result->Set(String::New("transfer"), packedObject);
+			array->Set(0, result);
 		}else{
-			array->Set(i-1, args[i]);
+			array->Set(0, args[1]);
 		} 
-  } while (++i < len);
+  }else{
+	  int i = 1; do { array->Set(i-1, args[i]); } while (++i < len);
+  }
 
     {
       char* buffer;
