@@ -5,6 +5,7 @@ using namespace v8;
 
 static Handle<Value> slice(const Arguments&);
 static Handle<Value> getByteLength(Local<String>, const AccessorInfo&);
+static Handle<Value> getItem(uint32_t index, const AccessorInfo &info);
 
 static Handle<Object> ArrayBufferNewInstance(){
 	HandleScope scope;
@@ -14,10 +15,21 @@ static Handle<Object> ArrayBufferNewInstance(){
 	sliceFunction->SetClassName(String::New("slice"));
 	point_templ->Set(String::New("slice"), sliceFunction->GetFunction());
 	point_templ->SetAccessor(String::New("byteLength"), getByteLength);
+	point_templ->SetIndexedPropertyHandler(getItem);
 	point_templ->SetInternalFieldCount(1);
 	Local<Object> newObj = point_templ->NewInstance();
-
+	 
 	return scope.Close(newObj);
+}
+
+static Handle<Value> getItem(uint32_t index, const AccessorInfo &info){
+	Local<External> wrap = Local<External>::Cast(info.Holder()->GetInternalField(0));
+	try{
+		int value = static_cast<MyArrayBuffer*>(wrap->Value())->getItem(index);
+		return Integer::New(value);
+	}catch(std::exception){
+		return Undefined();
+	}
 }
 
 static Handle<Value> ArrayBufferNewObject(const Arguments &args){
@@ -67,7 +79,7 @@ static Handle<Value> slice(const Arguments& args){
 	
 		Handle<Object> newObj = ArrayBufferNewInstance();
 		newObj->SetInternalField(0, External::New(newArrayBuffer));
-		newObj->SetIndexedPropertiesToExternalArrayData((void*)newArrayBuffer->getData(), kExternalByteArray, newArrayBuffer->getByteLength());
+		newObj->SetIndexedPropertiesToExternalArrayData((void*)newArrayBuffer->getData(), kExternalUnsignedByteArray, newArrayBuffer->getByteLength());
 
 		return scope.Close(newObj);
 	}catch(std::exception ex){

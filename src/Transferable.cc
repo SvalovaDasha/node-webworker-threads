@@ -67,6 +67,8 @@ Handle<Value> recoverTransferObject(Handle<Object> cover){
 
 		break;
 		}
+	default:
+		break;
 	}
 }
 
@@ -112,31 +114,60 @@ bool isArrayBuffer(const Handle<Object>& object){
 	return object->GetConstructorName()->ToString()->Equals(String::New("ArrayBuffer"));
 }
 
+Handle<String> getEscapePropertyName(Handle<String> propertyName){
+	size_t strLength = propertyName->Length();
+	char* str = new char[strLength*2+1];
+	propertyName->WriteAscii(str);
+	size_t i = 0;
+	while(i < strLength && str[i] == '*')
+		i++;
+
+	if(i == strLength)
+		memcpy(str+strLength, str, strLength+1);
+
+	return String::New(str);
+}
+
+Handle<String> getUnEscapePropertyName(Handle<String> escapedName){
+	size_t strLength = escapedName->Length();
+	char* str = new char[strLength+1];
+	escapedName->WriteAscii(str);
+	size_t i = 0;
+	while(i < strLength && str[i] == '*')
+		i++;
+
+	if(i == strLength)
+		str[strLength / 2] = '\0';
+
+	return String::New(str);
+}
+
 void goDeeper(const Handle<Object>& source, const std::vector<byte*>& transferPointersList, Handle<Object>& sourceCopy){
 	Handle<Array> sourcePropertyNames = source->GetPropertyNames();
 	size_t sourcePropertyNumber = sourcePropertyNames->Length();
 	for(size_t i=0; i<sourcePropertyNumber; i++){
 		Handle<String> currentPropertyName = sourcePropertyNames->Get(i)->ToString();
+		Handle<String> escapedName = getEscapePropertyName(currentPropertyName);
 		Handle<Value> currentProperty = source->Get(currentPropertyName);
 		Handle<Object> currentPropertyObject = currentProperty->ToObject();
 		if(currentPropertyObject->IsNull() || (isArrayBuffer(currentPropertyObject) 
 					&& !isArrayBufferInList(currentPropertyObject, transferPointersList))){
-			sourceCopy->Set(currentPropertyName, currentProperty);
+			sourceCopy->Set(escapedName, currentProperty);
 			continue;
 		}
 
 		if(isArrayBuffer(currentPropertyObject)){
 			Handle<Object> objectForTransfer = getObjectForTransfer(currentPropertyObject)->ToObject();
-			if(objectForTransfer->Has(String::New("transfer"))){
-				sourceCopy->Set(currentPropertyName, objectForTransfer);
+			if(objectForTransfer->Has(String::New("*"))){
+				sourceCopy->Set(escapedName, objectForTransfer);
 				currentPropertyObject->TurnOnAccessCheck();
 			}
 		}else{
 			if(currentProperty->IsObject()){
 				goDeeper(currentPropertyObject, transferPointersList, currentPropertyObject);
-				sourceCopy->Set(currentPropertyName, currentPropertyObject);
+				sourceCopy->Set(escapedName, currentPropertyObject);
 			}else
-				sourceCopy->Set(currentPropertyName, currentProperty);
+				sourceCopy->Set(escapedName, currentProperty);
 		}
 	}
 }
@@ -161,17 +192,18 @@ void goDeeper(const Handle<Object>& source, Handle<Object>& sourceCopy){
 	size_t sourcePropertyNumber = sourcePropertyNames->Length();
 	for(size_t i=0; i<sourcePropertyNumber; i++){
 		Handle<String> currentPropertyName = sourcePropertyNames->Get(i)->ToString();
+		Handle<String> unescapePropertyName = getUnEscapePropertyName(currentPropertyName);
 		Handle<Value> currentProperty = source->Get(currentPropertyName);
 		if(!currentProperty->IsObject()){
-			sourceCopy->Set(currentPropertyName, currentProperty);
+			sourceCopy->Set(unescapePropertyName, currentProperty);
 		}else{
 			Handle<Object> currentPropertyObject = currentProperty->ToObject();
 			if(currentPropertyObject->Has(String::New("*"))){
-				sourceCopy->Set(currentPropertyName, recoverTransferObject(currentPropertyObject));
+				sourceCopy->Set(unescapePropertyName, recoverTransferObject(currentPropertyObject));
 			}else{
 				Handle<Object> currentPropertyCopy = currentProperty->ToObject();
 				goDeeper(currentProperty->ToObject(), currentPropertyCopy);
-				sourceCopy->Set(currentPropertyName, currentPropertyCopy);
+				sourceCopy->Set(unescapePropertyName, currentPropertyCopy);
 			}
 		}
 
