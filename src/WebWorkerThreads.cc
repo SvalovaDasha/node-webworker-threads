@@ -831,17 +831,20 @@ static Handle<Value> processEmitSerialized (const Arguments &args) {
  \
   Local<Array> array= Array::New(len); \
   if(len == 2 && args[1]->IsArray()){ \
-		Handle<Object> transferList = args[1]->ToObject(); \
-		size_t transferListLength = transferList->Get(String::New("length"))->Uint32Value(); \
-		for(size_t i=0; i<transferListLength && i==0 /*while only one*/; i++){ \
-			Handle<Object> refObj = transferList->Get(i)->ToObject(); \
-			Handle<Value> valueForTransfer = getObjectForTransfer(refObj); \
-			if(valueForTransfer->ToObject()->Has(String::New("transfer"))){ \
-				array->Set(0, valueForTransfer); \
-				refObj->TurnOnAccessCheck();\
-			}else \
-				return ThrowException(valueForTransfer); \
-		} \
+		Local<Object> transferList = args[1]->ToObject();\
+		size_t duplicateIndex = testOnUnique(transferList);\
+		if(duplicateIndex != 0)\
+			return ThrowException(DataCloneError(String::New("Not all ArrayBuffers is transferList are unique")));\
+			\
+		int notTransferable = testOnTransferable(transferList);\
+		if(notTransferable >= 0)\
+			return ThrowException(DataCloneError(String::New("Not all objects are Transferable")));\
+		\
+		Local<Value> data = args[0];\
+		Handle<Value> packedObject = getPackedObject(data, transferList);\
+		Handle<Object> result = Object::New();\
+		result->Set(String::New("transfer"), packedObject);\
+		array->Set(0, result);\
 	} else { int i = 0; do { array->Set(i, args[i]); } while (++i < len); }\
  \
     { \
@@ -910,23 +913,9 @@ static Handle<Value> threadOnMessage(const Arguments& args){
 	Handle<Object> recObject = args[0]->ToObject();
 	
 	if(recObject->HasOwnProperty(String::New("transfer"))){
-		Handle<Value> newObject;
-		TransferableType transType = TransferableType(recObject->Get(String::New("TransferableType"))->Uint32Value());
+		Handle<Value> unpackedObject = getUnpackedObject(recObject->Get(String::New("transfer")));
 									
-		switch(transType){
-		case ArrayBuffer:{
-			byte* pointer = (byte*)(recObject->Get(String::New("dataPointer"))->Int32Value());
-			unsigned int dataLength = recObject->Get(String::New("byteLength"))->Uint32Value();
-			Handle<Object> abConstructor = Context::GetCurrent()->Global()->Get(String::New("ArrayBuffer"))->ToObject();
-			Handle<Value> abArgs = Integer::New(dataLength);
-			newObject = abConstructor->CallAsConstructor(1, &abArgs);
-			newObject->ToObject()->SetIndexedPropertiesToExternalArrayData(pointer, kExternalByteArray, dataLength);
-			break;
-		}
-		default:
-			return ThrowException(Exception::TypeError(String::New("This type is not transferable")));
-		}
-		result->Set(String::New("data"), newObject);
+		result->Set(String::New("data"), unpackedObject);
 	}else
 		result->Set(String::New("data"), args[0]);
 

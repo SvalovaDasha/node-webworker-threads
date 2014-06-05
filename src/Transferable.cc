@@ -111,7 +111,8 @@ bool isArrayBufferInList(const Handle<Object>& arrayBuffer, const std::vector<by
 }
 
 bool isArrayBuffer(const Handle<Object>& object){
-	return object->GetConstructorName()->ToString()->Equals(String::New("ArrayBuffer"));
+	return object->GetConstructorName()->ToString()->Equals(String::New("ArrayBuffer")) 
+		|| (object->HasIndexedPropertiesInExternalArrayData() && object->Has(String::New("byteLength")));
 }
 
 Handle<String> getEscapePropertyName(Handle<String> propertyName){
